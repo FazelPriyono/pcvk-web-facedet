@@ -3,7 +3,7 @@
 Backend API berbasis **Python FastAPI** untuk registrasi peserta, verifikasi wajah
 (1:1 dan 1:N), serta pengelolaan model SVM `HOG + LBPH` 8.740 dimensi.
 
-> Branch: `backend-pcvk` · Database: Neon PostgreSQL · Storage: Cloudinary
+> Branch: `dev` · Database: Neon PostgreSQL · Storage: Cloudinary
 
 ---
 
@@ -31,8 +31,10 @@ backend/
 
 ### 2.1 Prasyarat
 
-- **Python 3.11 / 3.12** (disarankan). Hindari Python 3.14 karena wheel
-  `opencv-python`/`scikit-image` belum tentu tersedia.
+- **Python 3.11 – 3.14**. Venv proyek ini teruji dengan **Python 3.14.4**.
+  `requirements.txt` mem-pin `opencv-python>=4.9.0,<5.0.0` karena OpenCV 5
+  menghapus `cv2.CascadeClassifier` yang dipakai pipeline — jangan upgrade
+  OpenCV ke 5.x.
 - Database Neon PostgreSQL yang sudah aktif.
 - Akun Cloudinary (cloud name, API key, API secret).
 
@@ -72,10 +74,26 @@ otomatis untuk host non-localhost.
 
 ### 2.4 Menjalankan server
 
+Aktifkan venv terlebih dahulu, lalu pilih salah satu opsi:
+
 ```powershell
 cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.\venv\Scripts\Activate.ps1
+
+# Opsi A - hanya bisa diakses dari komputer ini (localhost)
+python -m uvicorn app.main:app --reload --port 8000
+
+# Opsi B - bisa diakses dari perangkat lain di jaringan yang sama (LAN)
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+- Gunakan `python -m uvicorn`, bukan `uvicorn` saja, agar dijamin memakai
+  interpreter venv yang sedang aktif.
+- `--reload` hanya untuk development; jangan dipakai saat demo/production.
+- Opsi B akan memunculkan prompt firewall Windows saat pertama dijalankan —
+  pilih **Allow** bila ingin diakses dari perangkat lain.
+- Default host uvicorn adalah `127.0.0.1`, sehingga tanpa `--host 0.0.0.0`
+  server hanya bisa diakses lewat `localhost`.
 
 - Swagger UI: <http://localhost:8000/docs>
 - ReDoc: <http://localhost:8000/redoc>
@@ -88,6 +106,20 @@ model SVM aktif dimuat dari tabel `model_artifacts` (Cloudinary) bila tersedia.
 > oleh backend ini. Backend hanya *mengonsumsi* model: memuat versi aktif saat
 > startup atau menerima unggahan lewat `POST /api/model/sync`. Tidak ada
 > training otomatis saat aplikasi dijalankan.
+
+### 2.5 Akses dari perangkat lain (LAN) & CORS
+
+Jika backend dijalankan dengan `--host 0.0.0.0`:
+
+- Backend dapat diakses di `http://<IP-komputer>:8000`.
+- Di `.env.local` frontend, set `NEXT_PUBLIC_API_URL=http://<IP-komputer>:8000`.
+- CORS backend saat ini hanya mengizinkan origin `http://localhost:3000` dan
+  `http://127.0.0.1:3000` (lihat `allow_origins` di `app/main.py`). Jika
+  frontend juga dibuka lewat IP LAN (mis. `http://192.168.1.10:3000`),
+  tambahkan origin tersebut ke `allow_origins` lalu restart server.
+- Browser hanya mengizinkan kamera pada secure context (**localhost** atau
+  **HTTPS**). Membuka frontend lewat `http://<IP-LAN>:3000` akan memblokir
+  kamera; gunakan opsi upload foto atau sediakan HTTPS.
 
 ---
 
