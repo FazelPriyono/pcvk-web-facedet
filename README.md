@@ -1,5 +1,37 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## PCVK — Sistem Presensi Event Lari
+
+Repo ini menggabungkan frontend dan backend dalam satu branch `integration`:
+
+- `app/` — frontend Next.js (halaman register, check-in, riwayat absensi).
+- `backend/` — API FastAPI + Neon PostgreSQL + Cloudinary (lihat `backend/README.md`).
+
+### Menjalankan backend
+
+```bash
+cd backend
+python -m venv venv          # sekali saja
+venv\Scripts\activate        # Windows
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Salin `backend/.env.example` menjadi `backend/.env`, lalu isi `DATABASE_URL` dan tiga kredensial `CLOUDINARY_*` dari environment yang sama. Cek `GET http://localhost:8000/health`.
+
+### Menjalankan frontend
+
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+npm install
+npm run dev
+```
+
+Buka [http://localhost:3000](http://localhost:3000). Backend harus berjalan agar registrasi dan check-in tersimpan ke database.
+
+
 ## Getting Started
 
 First, run the development server:
