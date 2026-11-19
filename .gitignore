@@ -1,12 +1,22 @@
 # ============================================================
 # PCVK - Sistem Presensi Event Lari (Kelompok 5)
+# Menggabungkan aturan frontend (Next.js) + backend (FastAPI)
 # ============================================================
 
-# ---------- Node.js / Next.js (branch frontend-web) ----------
-/node_modules/
+# ---------- Node.js / Next.js ----------
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 /.next/
 /out/
 /build
+/coverage
+/.vercel
 next-env.d.ts
 *.tsbuildinfo
 npm-debug.log*
@@ -14,7 +24,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# ---------- Python / FastAPI (branch backend-pcvk) ----------
+# ---------- Python / FastAPI ----------
 __pycache__/
 *.py[cod]
 *$py.class
@@ -60,3 +70,4 @@ desktop.ini
 .idea/
 .vscode/
 *.log
+*.pem
