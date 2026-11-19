@@ -12,6 +12,11 @@ import {
   verifyAttendance,
   type VerifyResponse,
 } from "@/app/lib/api";
+import {
+  INSECURE_CONTEXT_MESSAGE,
+  cameraSupported,
+  describeCameraError,
+} from "@/app/lib/camera";
 
 type ScanState = "idle" | "scanning" | "verified" | "rejected";
 
@@ -110,6 +115,12 @@ export default function CheckInPage() {
 
   // Start webcam
   const startCamera = async () => {
+    if (!cameraSupported()) {
+      setCameraError(INSECURE_CONTEXT_MESSAGE);
+      setCameraActive(false);
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -119,17 +130,11 @@ export default function CheckInPage() {
         },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
       setCameraError(null);
       setCameraActive(true);
     } catch (err: unknown) {
       console.error(err);
-      setCameraError(
-        "Kamera tidak dapat diakses. Mohon izinkan akses webcam pada browser untuk menjalankan absensi."
-      );
+      setCameraError(describeCameraError(err));
       setCameraActive(false);
     }
   };
@@ -140,8 +145,28 @@ export default function CheckInPage() {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraActive(false);
   }, []);
+
+  // Elemen <video> hanya dirender saat cameraActive=true, jadi stream dipasang
+  // setelah render. Tanpa ini preview tampil hitam walau kamera sudah aktif.
+  useEffect(() => {
+    if (!cameraActive) return;
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!video || !stream) return;
+
+    video.srcObject = stream;
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.catch((err) => {
+        console.error("Gagal memutar preview kamera:", err);
+      });
+    }
+  }, [cameraActive]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -15,6 +15,11 @@ import {
   registerParticipant,
   toApiRaceCategory,
 } from "@/app/lib/api";
+import {
+  INSECURE_CONTEXT_MESSAGE,
+  cameraSupported,
+  describeCameraError,
+} from "@/app/lib/camera";
 
 const CATEGORIES: Runner["category"][] = [
   "5K",
@@ -56,6 +61,12 @@ export default function RegisterPage() {
   // Start webcam
   const startCamera = async () => {
     setCameraError(null);
+
+    if (!cameraSupported()) {
+      setCameraError(INSECURE_CONTEXT_MESSAGE);
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -65,16 +76,10 @@ export default function RegisterPage() {
         },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
       setCameraActive(true);
     } catch (err: unknown) {
       console.error(err);
-      setCameraError(
-        "Kamera tidak dapat diakses. Pastikan izin kamera telah diberikan di browser."
-      );
+      setCameraError(describeCameraError(err));
       setCameraActive(false);
     }
   };
@@ -85,8 +90,28 @@ export default function RegisterPage() {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraActive(false);
   }, []);
+
+  // Elemen <video> baru dirender ketika cameraActive=true. Karena itu stream
+  // dipasang di effect (setelah render), bukan di startCamera (sebelum render).
+  useEffect(() => {
+    if (!cameraActive) return;
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!video || !stream) return;
+
+    video.srcObject = stream;
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.catch((err) => {
+        console.error("Gagal memutar preview kamera:", err);
+      });
+    }
+  }, [cameraActive]);
 
   // Cleanup camera when leaving
   useEffect(() => {
@@ -97,17 +122,27 @@ export default function RegisterPage() {
 
   // Capture photo from video feed
   const capturePhoto = () => {
-    if (!videoRef.current) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Preview belum siap (metadata video belum termuat) -> jangan simpan frame hitam.
+    if (!video.videoWidth || !video.videoHeight) {
+      setCameraError(
+        "Preview kamera belum siap. Tunggu sebentar sampai gambar muncul, lalu ambil foto lagi."
+      );
+      return;
+    }
+
     const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     // Flip horizontally to match mirror preview
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
     setPhotoDataUrl(dataUrl);
