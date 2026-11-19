@@ -71,3 +71,5 @@ desktop.ini
 .vscode/
 *.log
 *.pem
+
+/venv

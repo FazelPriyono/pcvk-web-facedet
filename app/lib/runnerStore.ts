@@ -5,12 +5,12 @@ export interface Runner {
   email: string;
   phone: string;
   category: "5K" | "10K" | "21K Half Marathon" | "42K Full Marathon";
-  bloodType: string;
-  emergencyContact: string;
   registeredAt: string;
   photoUrl: string;
   checkedIn: boolean;
   checkedInAt?: string;
+  bloodType?: string;
+  emergencyContact?: string;
 }
 
 const STORAGE_KEY = "pelayon_registered_runners";
@@ -24,8 +24,6 @@ const INITIAL_RUNNERS: Runner[] = [
     email: "dimas.pratama@example.com",
     phone: "081234567890",
     category: "10K",
-    bloodType: "O",
-    emergencyContact: "081298765432 (Istri)",
     registeredAt: "2026-11-18 09:30",
     photoUrl: "/images/race-photo-1.png",
     checkedIn: false,
@@ -37,8 +35,6 @@ const INITIAL_RUNNERS: Runner[] = [
     email: "siti.rahma@example.com",
     phone: "081398765432",
     category: "21K Half Marathon",
-    bloodType: "A",
-    emergencyContact: "081311223344 (Kakak)",
     registeredAt: "2026-11-18 10:15",
     photoUrl: "/images/race-photo-2.png",
     checkedIn: false,
@@ -50,8 +46,6 @@ const INITIAL_RUNNERS: Runner[] = [
     email: "budi.santoso@example.com",
     phone: "081765432109",
     category: "42K Full Marathon",
-    bloodType: "B",
-    emergencyContact: "081799887766 (Ibu)",
     registeredAt: "2026-11-18 11:00",
     photoUrl: "/images/race-photo-3.png",
     checkedIn: false,

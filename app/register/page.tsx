@@ -33,8 +33,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState<Runner["category"]>("10K");
-  const [bloodType, setBloodType] = useState("O");
-  const [emergencyContact, setEmergencyContact] = useState("");
   const [bibNumber, setBibNumber] = useState("");
 
   // Camera & photo states
@@ -201,8 +199,6 @@ export default function RegisterPage() {
         email: participant.email,
         phone: participant.phone_number ?? phone,
         category,
-        bloodType,
-        emergencyContact,
         registeredAt: new Date(
           participant.created_at ?? Date.now()
         ).toLocaleString("id-ID", {
@@ -230,7 +226,6 @@ export default function RegisterPage() {
     setFullName("");
     setEmail("");
     setPhone("");
-    setEmergencyContact("");
     setPhotoDataUrl(null);
     setBibNumber(generateBibNumber(category));
   };
@@ -363,37 +358,6 @@ export default function RegisterPage() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="081234567890"
-                      className="mt-1.5 w-full rounded-lg border border-[#e3e7ed] bg-[#f8f9fa] px-4 py-2.5 text-[14px] text-[#172337] outline-hidden transition-colors focus:border-[#356bff] focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-[13px] font-medium text-[#172337]">
-                      Golongan Darah
-                    </label>
-                    <select
-                      value={bloodType}
-                      onChange={(e) => setBloodType(e.target.value)}
-                      className="mt-1.5 w-full rounded-lg border border-[#e3e7ed] bg-[#f8f9fa] px-4 py-2.5 text-[14px] text-[#172337] outline-hidden transition-colors focus:border-[#356bff] focus:bg-white"
-                    >
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="AB">AB</option>
-                      <option value="O">O</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[13px] font-medium text-[#172337]">
-                      Kontak Darurat (Nama & Telp)
-                    </label>
-                    <input
-                      type="text"
-                      value={emergencyContact}
-                      onChange={(e) => setEmergencyContact(e.target.value)}
-                      placeholder="Contoh: Budi (Istri) - 081298765432"
                       className="mt-1.5 w-full rounded-lg border border-[#e3e7ed] bg-[#f8f9fa] px-4 py-2.5 text-[14px] text-[#172337] outline-hidden transition-colors focus:border-[#356bff] focus:bg-white"
                     />
                   </div>
@@ -646,7 +610,7 @@ export default function RegisterPage() {
                       {registeredRunner.fullName}
                     </p>
                     <p className="text-[12px] text-[#667085]">
-                      Gol. Darah: {registeredRunner.bloodType}
+                      {registeredRunner.email}
                     </p>
                   </div>
                   <div className="relative h-24 w-20 shrink-0 overflow-hidden rounded-lg border border-[#e3e7ed] bg-gray-100">

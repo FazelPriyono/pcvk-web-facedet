@@ -2,7 +2,7 @@ import Link from "next/link";
 
 interface NavbarProps {
   /** Which nav item is currently active */
-  active?: "home" | "find-photos" | "register" | "checkin";
+  active?: "home" | "register" | "checkin";
 }
 
 export default function Navbar({ active = "home" }: NavbarProps) {
@@ -18,7 +18,7 @@ export default function Navbar({ active = "home" }: NavbarProps) {
         </Link>
 
         {/* Nav links */}
-        <div className="flex items-center gap-3 sm:gap-6 text-[13px] md:text-[14px]">
+        <div className="flex items-center gap-4 sm:gap-6 text-[13px] md:text-[14px]">
           <Link
             href="/"
             className={
@@ -28,16 +28,6 @@ export default function Navbar({ active = "home" }: NavbarProps) {
             }
           >
             Home
-          </Link>
-          <Link
-            href="/search"
-            className={
-              active === "find-photos"
-                ? "font-semibold text-[#356bff]"
-                : "text-[#667085] hover:text-[#172337] transition-colors"
-            }
-          >
-            Cari Foto
           </Link>
           <Link
             href="/register"
@@ -51,10 +41,11 @@ export default function Navbar({ active = "home" }: NavbarProps) {
           </Link>
           <Link
             href="/check-in"
-            className={`px-3 py-1.5 rounded-md transition-colors ${active === "checkin"
+            className={`px-3.5 py-1.5 rounded-lg transition-colors text-[13px] md:text-[14px] ${
+              active === "checkin"
                 ? "bg-[#356bff] text-white font-medium"
                 : "bg-white border border-[#e3e7ed] text-[#172337] hover:border-[#356bff]"
-              }`}
+            }`}
           >
             Check-in Hari-H
           </Link>
