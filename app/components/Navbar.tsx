@@ -12,7 +12,7 @@ export default function Navbar({ active = "home" }: NavbarProps) {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-1 group">
           <span className="text-[24px] font-bold tracking-[-1.4px] text-[#172337] md:text-[28px]">
-            pelayon
+            Playon
           </span>
           <span className="mt-4 h-[5px] w-[5px] rounded-full bg-[#356bff]" />
         </Link>
@@ -51,11 +51,10 @@ export default function Navbar({ active = "home" }: NavbarProps) {
           </Link>
           <Link
             href="/check-in"
-            className={`px-3 py-1.5 rounded-md transition-colors ${
-              active === "checkin"
+            className={`px-3 py-1.5 rounded-md transition-colors ${active === "checkin"
                 ? "bg-[#356bff] text-white font-medium"
                 : "bg-white border border-[#e3e7ed] text-[#172337] hover:border-[#356bff]"
-            }`}
+              }`}
           >
             Check-in Hari-H
           </Link>
