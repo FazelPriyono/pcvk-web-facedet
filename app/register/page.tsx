@@ -7,9 +7,14 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import {
   generateBibNumber,
-  saveRunner,
   Runner,
 } from "@/app/lib/runnerStore";
+import {
+  ApiError,
+  dataUrlToBlob,
+  registerParticipant,
+  toApiRaceCategory,
+} from "@/app/lib/api";
 
 const CATEGORIES: Runner["category"][] = [
   "5K",
@@ -35,12 +40,16 @@ export default function RegisterPage() {
   // Success modal state
   const [registeredRunner, setRegisteredRunner] = useState<Runner | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Generate initial BIB on mount / category change
+  // Generate initial BIB on mount / category change.
+  // Nomor BIB memakai Math.random() + waktu browser, jadi sengaja dibuat setelah
+  // mount agar HTML server dan client tetap identik (hindari hydration mismatch).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBibNumber(generateBibNumber(category));
   }, [category]);
 
@@ -125,8 +134,10 @@ export default function RegisterPage() {
     startCamera();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+
     if (!fullName || !email || !phone) {
       alert("Mohon lengkapi semua kolom biodata wajib.");
       return;
@@ -137,30 +148,50 @@ export default function RegisterPage() {
     }
 
     setIsSubmitting(true);
-    const newRunner: Runner = {
-      id: `run-${Date.now()}`,
-      bib: bibNumber,
-      fullName,
-      email,
-      phone,
-      category,
-      bloodType,
-      emergencyContact,
-      registeredAt: new Date().toLocaleString("id-ID", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-      photoUrl: photoDataUrl,
-      checkedIn: false,
-    };
+    try {
+      const result = await registerParticipant({
+        bibNumber,
+        fullName,
+        email,
+        phoneNumber: phone,
+        raceCategory: toApiRaceCategory(category),
+        photo: dataUrlToBlob(photoDataUrl),
+      });
 
-    saveRunner(newRunner);
-    setRegisteredRunner(newRunner);
-    setIsSubmitting(false);
+      const participant = result.participant;
+      setRegisteredRunner({
+        id: `db-${participant.id}`,
+        bib: participant.bib_number,
+        fullName: participant.full_name,
+        email: participant.email,
+        phone: participant.phone_number ?? phone,
+        category,
+        bloodType,
+        emergencyContact,
+        registeredAt: new Date(
+          participant.created_at ?? Date.now()
+        ).toLocaleString("id-ID", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }),
+        photoUrl: participant.registration_photo_url || photoDataUrl,
+        checkedIn: false,
+      });
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Registrasi gagal. Silakan coba lagi.";
+      setSubmitError(message);
+      alert(`Registrasi gagal: ${message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResetForm = () => {
     setRegisteredRunner(null);
+    setSubmitError(null);
     setFullName("");
     setEmail("");
     setPhone("");
@@ -502,6 +533,13 @@ export default function RegisterPage() {
                 Foto wajah hanya digunakan untuk sistem deteksi wajah dan absensi hari-H lomba. Tidak akan disalahgunakan atau dibagikan ke pihak ketiga.
               </p>
             </div>
+
+            {/* Error Registrasi */}
+            {submitError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-[12px] leading-relaxed text-red-700">
+                {submitError}
+              </div>
+            )}
 
             {/* Submit Button */}
             <button

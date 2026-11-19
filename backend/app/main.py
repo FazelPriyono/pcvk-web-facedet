@@ -235,6 +235,7 @@ def _participant_summary(participant: Optional[Participant]) -> Optional[Partici
         bib_number=participant.bib_number,
         full_name=participant.full_name,
         race_category=participant.race_category or "5K",
+        photo_url=participant.registration_photo_url,
     )
 
 
@@ -644,6 +645,9 @@ def verify_attendance(
         verification_mode=mode,
         input_bib_number=bib,
         participant=_participant_summary(participant),
+        participant_photo_url=(
+            participant.registration_photo_url if participant else None
+        ),
         svm_probability=round(float(svm_probability), 4),
         similarity_score=similarity_score,
         euclidean_distance=round(float(distance), 4),
@@ -1044,6 +1048,12 @@ def list_attendance_logs(
             participant_id=log.participant_id,
             participant_bib_number=log.participant.bib_number if log.participant else log.input_bib_number,
             participant_name=log.participant.full_name if log.participant else None,
+            participant_race_category=(
+                log.participant.race_category if log.participant else None
+            ),
+            participant_photo_url=(
+                log.participant.registration_photo_url if log.participant else None
+            ),
             input_bib_number=log.input_bib_number,
             checkin_photo_url=log.checkin_photo_url,
             cloudinary_checkin_id=log.cloudinary_checkin_id,

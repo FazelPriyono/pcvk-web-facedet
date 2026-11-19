@@ -1,13 +1,40 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
-import { getRunners, markRunnerCheckIn, Runner } from "@/app/lib/runnerStore";
+import {
+  ApiError,
+  dataUrlToBlob,
+  formatCheckInTime,
+  getAttendanceLogs,
+  verifyAttendance,
+  type VerifyResponse,
+} from "@/app/lib/api";
 
 type ScanState = "idle" | "scanning" | "verified" | "rejected";
+
+interface VerifiedRunnerView {
+  id: number;
+  bib: string;
+  fullName: string;
+  category: string;
+  photoUrl: string | null;
+  checkedInAt: string;
+  matchScore: number;
+  distance: number;
+  mode: string;
+}
+
+interface RecentLogView {
+  id: number;
+  bib: string;
+  fullName: string;
+  category: string | null;
+  photoUrl: string | null;
+  checkedInAt: string;
+}
 
 export default function CheckInPage() {
   const [cameraActive, setCameraActive] = useState(false);
@@ -16,13 +43,16 @@ export default function CheckInPage() {
   const [autoScan, setAutoScan] = useState(false);
 
   // Result state
-  const [verifiedRunner, setVerifiedRunner] = useState<Runner | null>(null);
+  const [verifiedRunner, setVerifiedRunner] = useState<VerifiedRunnerView | null>(
+    null
+  );
   const [capturedSnapshot, setCapturedSnapshot] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>("");
   const [matchScore, setMatchScore] = useState<number>(0);
+  const [thresholdProbability, setThresholdProbability] = useState<number>(45);
 
   // Recent logs
-  const [recentLogs, setRecentLogs] = useState<Runner[]>([]);
+  const [recentLogs, setRecentLogs] = useState<RecentLogView[]>([]);
 
   // Manual fallback search
   const [manualBib, setManualBib] = useState("");
@@ -31,20 +61,55 @@ export default function CheckInPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Load recent checked-in runners
-  const refreshLogs = useCallback(() => {
-    const allRunners = getRunners();
-    const checked = allRunners.filter((r) => r.checkedIn);
-    setRecentLogs(checked);
+  // Load recent verified check-ins dari backend
+  const refreshLogs = useCallback(async () => {
+    try {
+      const logs = await getAttendanceLogs({ limit: 10, status: "VERIFIED" });
+      setRecentLogs(
+        logs.map((log) => ({
+          id: log.id,
+          bib: log.participant_bib_number ?? log.input_bib_number ?? "-",
+          fullName: log.participant_name ?? "Peserta",
+          category: log.participant_race_category,
+          photoUrl: log.checkin_photo_url ?? log.participant_photo_url,
+          checkedInAt: formatCheckInTime(log.checked_in_at),
+        }))
+      );
+    } catch {
+      // Backend belum siap / offline: biarkan daftar kosong.
+      setRecentLogs([]);
+    }
   }, []);
 
   useEffect(() => {
-    refreshLogs();
-  }, [refreshLogs]);
+    let cancelled = false;
+
+    getAttendanceLogs({ limit: 10, status: "VERIFIED" })
+      .then((logs) => {
+        if (cancelled) return;
+        setRecentLogs(
+          logs.map((log) => ({
+            id: log.id,
+            bib: log.participant_bib_number ?? log.input_bib_number ?? "-",
+            fullName: log.participant_name ?? "Peserta",
+            category: log.participant_race_category,
+            photoUrl: log.checkin_photo_url ?? log.participant_photo_url,
+            checkedInAt: formatCheckInTime(log.checked_in_at),
+          }))
+        );
+      })
+      .catch(() => {
+        // Backend belum siap / offline: biarkan daftar kosong.
+        if (!cancelled) setRecentLogs([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Start webcam
   const startCamera = async () => {
-    setCameraError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -58,6 +123,7 @@ export default function CheckInPage() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      setCameraError(null);
       setCameraActive(true);
     } catch (err: unknown) {
       console.error(err);
@@ -86,70 +152,98 @@ export default function CheckInPage() {
 
   // Auto start camera on page load if permitted
   useEffect(() => {
-    startCamera();
+    // Ditunda satu microtask supaya setState kamera tidak berjalan sinkron
+    // di dalam effect (menghindari cascading render).
+    queueMicrotask(() => {
+      void startCamera();
+    });
+    // startCamera hanya didefinisikan ulang tiap render; cukup dijalankan sekali.
   }, []);
 
-  // Perform face recognition scan
-  const triggerScan = useCallback(() => {
-    if (!videoRef.current || scanState === "scanning") return;
+  // Ambil frame dari video webcam -> data URL + Blob untuk dikirim ke API
+  const captureFrame = useCallback((): { dataUrl: string; blob: Blob } | null => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
 
-    setScanState("scanning");
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // Mirror agar sama dengan preview kamera.
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    return { dataUrl, blob: dataUrlToBlob(dataUrl) };
+  }, []);
+
+  const applyVerificationResult = useCallback(
+    (result: VerifyResponse) => {
+      setMatchScore(result.similarity_score);
+      setThresholdProbability(Math.round(result.threshold_probability * 100));
+
+      if (result.status === "VERIFIED" && result.participant) {
+        setVerifiedRunner({
+          id: result.participant.id,
+          bib: result.participant.bib_number,
+          fullName: result.participant.full_name,
+          category: result.participant.race_category ?? "-",
+          photoUrl:
+            result.participant_photo_url ?? result.participant.photo_url ?? null,
+          checkedInAt: formatCheckInTime(result.checked_in_at),
+          matchScore: result.similarity_score,
+          distance: result.euclidean_distance,
+          mode: result.verification_mode,
+        });
+        setScanState("verified");
+        void refreshLogs();
+      } else {
+        setScanState("rejected");
+        setRejectionReason(result.message);
+      }
+    },
+    [refreshLogs]
+  );
+
+  // Perform face recognition scan (mode 1:N ke backend)
+  const triggerScan = useCallback(async () => {
+    if (scanState === "scanning") return;
+
     setVerifiedRunner(null);
     setCapturedSnapshot(null);
+    setRejectionReason("");
+    setScanState("scanning");
 
-    // Capture snapshot from webcam
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      setCapturedSnapshot(canvas.toDataURL("image/jpeg", 0.85));
+    const frame = captureFrame();
+    if (!frame) {
+      setScanState("rejected");
+      setRejectionReason(
+        "Kamera belum aktif. Nyalakan kamera lalu coba scan ulang."
+      );
+      setMatchScore(0);
+      return;
     }
 
-    // Simulate biometric face detection process (1.2s delay)
-    setTimeout(() => {
-      const allRunners = getRunners();
+    setCapturedSnapshot(frame.dataUrl);
 
-      // Check if there are any runners registered
-      if (allRunners.length === 0) {
-        setScanState("rejected");
-        setRejectionReason("Belum ada peserta yang terdaftar di database.");
-        setMatchScore(12);
-        return;
-      }
-
-      // Pick an eligible candidate or simulate match based on state
-      // For realistic demonstration: find the first not-yet-checked-in runner, or random match
-      const pendingRunners = allRunners.filter((r) => !r.checkedIn);
-
-      // 85% probability to match successfully if pending runners exist
-      const shouldMatch = pendingRunners.length > 0 && Math.random() > 0.15;
-
-      if (shouldMatch) {
-        const candidate = pendingRunners[0];
-        const updated = markRunnerCheckIn(candidate.bib);
-        if (updated) {
-          setVerifiedRunner(updated);
-          setScanState("verified");
-          setMatchScore(Math.floor(92 + Math.random() * 7)); // 92% - 98%
-          refreshLogs();
-        }
-      } else {
-        // Failed / Rejected case
-        setScanState("rejected");
-        const reasons = [
-          "Wajah tidak cocok dengan database peserta lomba (Kemiripan < 65%).",
-          "Peserta dengan wajah ini sudah melakukan check-in sebelumnya.",
-          "Pencahayaan wajah kurang optimal atau posisi wajah terhalang masker/topi.",
-        ];
-        setRejectionReason(reasons[Math.floor(Math.random() * reasons.length)]);
-        setMatchScore(Math.floor(35 + Math.random() * 25)); // 35% - 59%
-      }
-    }, 1300);
-  }, [scanState, refreshLogs]);
+    try {
+      const result = await verifyAttendance({
+        photo: frame.blob,
+        mode: "1:N",
+      });
+      applyVerificationResult(result);
+    } catch (err) {
+      setScanState("rejected");
+      setRejectionReason(
+        err instanceof ApiError
+          ? err.message
+          : "Verifikasi wajah gagal diproses oleh server."
+      );
+    }
+  }, [scanState, captureFrame, applyVerificationResult]);
 
   // Auto scan interval loop
   useEffect(() => {
@@ -168,19 +262,40 @@ export default function CheckInPage() {
     setCapturedSnapshot(null);
   };
 
-  const handleManualCheckIn = (e: React.FormEvent) => {
+  const handleManualCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualBib) return;
-    const updated = markRunnerCheckIn(manualBib.trim());
-    if (updated) {
-      setVerifiedRunner(updated);
-      setScanState("verified");
-      setMatchScore(100);
-      setShowManualModal(false);
-      setManualBib("");
-      refreshLogs();
-    } else {
-      alert(`Nomor BIB "${manualBib}" tidak ditemukan.`);
+    const bib = manualBib.trim().toUpperCase();
+    if (!bib) return;
+
+    const frame = captureFrame();
+    if (!frame) {
+      alert(
+        "Nyalakan kamera terlebih dahulu. Foto webcam tetap diperlukan untuk verifikasi biometrik."
+      );
+      return;
+    }
+
+    setShowManualModal(false);
+    setManualBib("");
+    setVerifiedRunner(null);
+    setRejectionReason("");
+    setCapturedSnapshot(frame.dataUrl);
+    setScanState("scanning");
+
+    try {
+      const result = await verifyAttendance({
+        photo: frame.blob,
+        mode: "1:1",
+        bibNumber: bib,
+      });
+      applyVerificationResult(result);
+    } catch (err) {
+      setScanState("rejected");
+      setRejectionReason(
+        err instanceof ApiError
+          ? err.message
+          : `BIB "${bib}" gagal diverifikasi.`
+      );
     }
   };
 
@@ -493,11 +608,17 @@ export default function CheckInPage() {
 
                     <div className="overflow-hidden rounded-lg border border-[#e3e7ed] bg-gray-50 text-center">
                       <div className="relative aspect-square w-full">
-                        <img
-                          src={verifiedRunner.photoUrl}
-                          alt="Database Photo"
-                          className="h-full w-full object-cover"
-                        />
+                        {verifiedRunner.photoUrl ? (
+                          <img
+                            src={verifiedRunner.photoUrl}
+                            alt="Database Photo"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-[11px] text-gray-500">
+                            Foto tidak tersedia
+                          </div>
+                        )}
                       </div>
                       <p className="py-1.5 text-[11px] font-medium text-emerald-600 font-semibold">
                         Database ({matchScore}% Match)
@@ -523,6 +644,12 @@ export default function CheckInPage() {
                       <span className="text-[#667085]">Kategori:</span>
                       <span className="rounded bg-[#356bff] px-2 py-0.5 text-[11px] font-semibold text-white">
                         {verifiedRunner.category}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200/60 pb-2">
+                      <span className="text-[#667085]">Jarak Euclidean:</span>
+                      <span className="font-mono text-[12px] font-semibold text-[#172337]">
+                        {verifiedRunner.distance.toFixed(4)}
                       </span>
                     </div>
                     <div className="flex justify-between border-b border-gray-200/60 pb-2">
@@ -597,7 +724,7 @@ export default function CheckInPage() {
                       {rejectionReason}
                     </p>
                     <p className="mt-2 text-[11px] text-red-600 font-mono">
-                      Skor Biometrik: {matchScore}% (Di bawah batas 70%)
+                      Skor Biometrik: {matchScore}% (Di bawah batas {thresholdProbability}%)
                     </p>
                   </div>
 
@@ -644,7 +771,7 @@ export default function CheckInPage() {
                       <div className="flex items-center gap-3">
                         <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-gray-200">
                           <img
-                            src={log.photoUrl}
+                            src={log.photoUrl ?? "/images/race-photo-1.png"}
                             alt=""
                             className="h-full w-full object-cover"
                           />
@@ -654,7 +781,7 @@ export default function CheckInPage() {
                             {log.fullName}
                           </p>
                           <p className="font-mono text-[11px] text-[#667085]">
-                            {log.bib} · {log.category}
+                            {log.bib} · {log.category ?? "-"}
                           </p>
                         </div>
                       </div>

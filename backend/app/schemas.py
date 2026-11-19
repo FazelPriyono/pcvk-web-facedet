@@ -31,6 +31,7 @@ class ParticipantSummary(BaseModel):
     bib_number: str
     full_name: str
     race_category: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class RegisterResponse(BaseModel):
@@ -49,6 +50,7 @@ class VerifyResponse(BaseModel):
     verification_mode: str
     input_bib_number: Optional[str] = None
     participant: Optional[ParticipantSummary] = None
+    participant_photo_url: Optional[str] = None
     svm_probability: float
     similarity_score: float = Field(description="Probabilitas SVM dalam persen (0.00-100.00)")
     euclidean_distance: float
@@ -69,6 +71,8 @@ class AttendanceLogOut(BaseModel):
     participant_id: Optional[int] = None
     participant_bib_number: Optional[str] = None
     participant_name: Optional[str] = None
+    participant_race_category: Optional[str] = None
+    participant_photo_url: Optional[str] = None
     input_bib_number: Optional[str] = None
     checkin_photo_url: Optional[str] = None
     cloudinary_checkin_id: Optional[str] = None
